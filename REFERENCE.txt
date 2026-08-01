@@ -1,0 +1,125 @@
+======================================
+  KENZON TRADER — 命令参考手册
+======================================
+
+用法: run_cli <命令> [参数]
+
+--------
+基础命令
+--------
+
+  查看行情
+    run_cli status BTC
+    run_cli status ETH
+    run_cli status SOL
+
+  列出监控币种
+    run_cli list
+
+  查看币币对
+    run_cli pairs
+    run_cli pairs SOL/BTC
+    run_cli pairs ETH/BTC
+
+  一键报告
+    run_report
+
+  实盘运行 (testnet)
+    run_cli run ETH --timeframe 1h --ma-entry 12 --ma-exit 26 --simple --filter --stop-pct 8 --tp-pct 80
+
+  激进策略
+    python run_aggressive.py
+
+----
+回测
+----
+
+  run_cli backtest <币种> <开始日期> <结束日期> [选项]
+
+  [选项]
+
+    --timeframe <tf>      K线周期 (1h / 4h / 1d)
+    --capital <金额>       初始本金 (默认 10000)
+    --position-size <比例> 仓位比例 (默认 0.25 = 25%)
+    --stop-pct <百分比>    止损百分比 (如 8 = 跌8%止损)
+    --tp-pct <百分比>      止盈百分比 (如 80 = 涨80%止盈)
+    --sl <金额>            绝对止损 (USDT)
+    --tp <金额>            绝对止盈 (USDT)
+    --entries <次数>       分批建仓次数 (默认 1)
+    --ma-entry <周期>      入场MA周期 (默认 38)
+    --ma-exit <周期>       出场MA周期 (默认 60)
+    --simple               使用简洁回测引擎 (与原版结果一致)
+    --filter               启用市场状态过滤 (牛做多熊做空)
+    --min-cross <百分比>    最小突破阈值，忽略小于该值的穿越 (如 0.2)
+    --atr                  启用ATR动态止损止盈 (替代固定百分比)
+    --atr-mult <倍数>       ATR止损倍数 (默认 2.0)
+    --atr-tp-mult <倍数>    ATR止盈倍数 (默认 6.0)
+
+------------------
+常用回测组合示例
+------------------
+
+  Kenzoy 原版 (日线 MA38/60)
+    run_cli backtest BTC 2025-01-01 2026-07-12 --stop-pct 8 --tp-pct 80
+
+  激进模式 (4h MA7/25)
+    run_cli backtest BTC 2025-01-01 2026-07-12 --timeframe 4h --ma-entry 7 --ma-exit 25 --stop-pct 5 --tp-pct 15
+
+  中频模式 (4h MA14/30)
+    run_cli backtest BTC 2025-01-01 2026-07-12 --timeframe 4h --ma-entry 14 --ma-exit 30 --stop-pct 6 --tp-pct 20
+
+  SOL 激进 (波动大,宽止损)
+    run_cli backtest SOL 2025-01-01 2026-07-12 --timeframe 4h --ma-entry 7 --ma-exit 25 --stop-pct 10 --tp-pct 30
+
+  ETH 原版
+    run_cli backtest ETH 2025-01-01 2026-07-12 --stop-pct 8 --tp-pct 80
+
+  ✨ 与原版一致的结果 (使用 --simple)
+    run_cli backtest BTC 2025-01-01 2026-07-12 --stop-pct 8 --tp-pct 80 --simple
+
+  激进 + 简洁引擎
+    run_cli backtest BTC 2025-01-01 2026-07-12 --timeframe 4h --ma-entry 14 --ma-exit 30 --stop-pct 6 --tp-pct 20 --simple
+
+  ✨ 带市场过滤 (牛做多熊做空)
+    run_cli backtest BTC 2024-06-01 2026-07-12 --stop-pct 8 --tp-pct 80 --simple --filter
+
+  ✨ 过滤 + 忽略微小穿越 (< 0.2%)
+    run_cli backtest BTC 2024-06-01 2026-07-12 --stop-pct 8 --tp-pct 80 --simple --filter --min-cross 0.2
+
+  分批建仓 (3次入场)
+    run_cli backtest BTC 2025-01-01 2026-07-12 --stop-pct 8 --tp-pct 80 --entries 3
+
+--------
+策略对照
+--------
+
+  名称        | 周期 | 入场MA | 出场MA | 止损 | 止盈 | 风格
+  ------------+------+--------+--------+------+------+-------
+  Kenzoy原版  | 1d   | MA38   | MA60   | 8%   | 80%  | 长线趋势
+  中频        | 4h   | MA14   | MA30   | 6%   | 20%  | 波段
+  激进        | 4h   | MA7    | MA25   | 5%   | 15%  | 短线金叉死叉
+  SOL激进     | 4h   | MA7    | MA25   | 10%  | 30%  | 高波动币种
+
+--------
+保持运行
+--------
+
+  双击 keep_alive.bat
+    → 防止休眠 + 每5分钟检查行情
+
+  单独防休眠:
+    powercfg /change standby-timeout-ac 0
+    powercfg /hibernate off
+
+--------
+环境变量 (.env)
+--------
+
+  BINANCE_API_KEY=xxx     Binance API Key
+  BINANCE_SECRET=xxx      Binance Secret
+  BINANCE_TESTNET=true    模拟盘模式
+  BINANCE_FUTURES=true    合约模式 (带杠杆)
+  BINANCE_LEVERAGE=5      杠杆倍数
+  KENZON_LOG_LEVEL=INFO   日志级别
+
+======================================

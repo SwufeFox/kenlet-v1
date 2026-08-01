@@ -1,0 +1,31 @@
+[project]
+name = "kenlet-trader"
+version = "1.0.0"
+description = "kenlet-v1 — 三层自适应加密交易系统 (统一引擎 + 组合优胜劣汰 + LLM Fund Manager)"
+authors = [{name = "kenlet"}]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.11"
+
+dependencies = [
+    "ccxt>=4.0",
+    "numpy>=1.24",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+    "rich>=13.0",
+    "pandas>=2.0",
+]
+
+[project.scripts]
+kenlet = "kenlet.main:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

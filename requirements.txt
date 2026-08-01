@@ -1,0 +1,22 @@
+# Kenzon Trader — Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core
+ccxt>=4.0
+pyyaml>=6.0
+pandas>=2.0
+numpy>=1.24
+
+# Utilities
+python-dateutil>=2.8
+python-dotenv>=1.0
+
+# Technical analysis
+ta>=0.10
+
+# CLI / display (optional but recommended)
+rich>=13.0
+
+# Testing
+pytest>=7.0
+pytest-mock>=3.0

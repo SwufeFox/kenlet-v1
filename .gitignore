@@ -1,0 +1,54 @@
+# ── 快照/元数据 ──
+.alma-snapshots/
+
+# ── Python 缓存 ──
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# ── 虚拟环境 ──
+.venv/
+venv/
+env/
+ENV/
+.conda/
+
+# ── 密钥与敏感配置 (绝不提交) ──
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ── 构建产物 ──
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# ── 运行时生成物 ──
+logs/
+*.log
+reports/
+backtest_*.csv
+backtest_*.html
+
+# ── 外部数据缓存 (指数 CSV / 行情缓存) ──
+macro/
+data/indices/
+data/indices_*.pkl
+
+# ── IDE / 系统 ──
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
