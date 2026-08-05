@@ -76,6 +76,7 @@ def build_strategy_params(config: dict | None = None) -> StrategyParams:
         use_risk_sizing=bool(r.get("use_risk_sizing", True)),
         initial_capital=float(b.get("initial_capital", 10000.0)),
         position_size=float(b.get("position_size", 0.25)),
+        num_entries=int(s.get("num_entries", 1)),
         llm_enabled=bool(llm.get("enabled", False)),
         llm_check_interval=int(llm.get("check_interval", 50)),
     )

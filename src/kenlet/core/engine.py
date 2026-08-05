@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from kenlet.core.models import Bar, EngineAction, Position, Signal, TradeRecord
 from kenlet.core.params import StrategyParams
+from kenlet.risk.sizing import MIN_DEVIATION_PCT
 
 if TYPE_CHECKING:
     from kenlet.strategy.base import Strategy
@@ -61,6 +62,8 @@ class TradingEngine:
         self._entry_window_start: int = -1
         self._pending_signal: Signal | None = None
         self._last_action: EngineAction | None = None
+        # 本 bar 是否有入场信号因满仓被拒 (供 Layer2 触发优胜劣汰旋转)
+        self.entry_rejected_capacity: bool = False
 
         # 供 Layer2/Layer3 观测的快照
         self.indicators: dict[str, Any] = {}
@@ -82,6 +85,7 @@ class TradingEngine:
         actions: list[EngineAction] = []
         self.indicators = indicators
         self.regime = str(indicators.get("regime", "unknown"))
+        self.entry_rejected_capacity = False
 
         # 1. 检查现有持仓的出场条件
         actions.extend(self._check_exits(bar))
@@ -184,12 +188,14 @@ class TradingEngine:
             logger.debug("[%s] 指数门控 risk_off，禁止开新仓", self.symbol)
             return actions
         if len(self.positions) >= self.params.max_positions:
+            self.entry_rejected_capacity = True
             logger.debug("[%s] 已达最大持仓数 %d，忽略信号", self.symbol, self.params.max_positions)
             return actions
 
         # 仓位大小计算 — 公式: 仓位 = 允许亏损 / 止损偏差
+        # 分批建仓时风险预算按批次均分 (总风险 = 一次预算)
         sl, tp = self._compute_stops(bar.close, signal.direction)
-        quantity = self._compute_quantity(bar.close, sl)
+        quantity = self._compute_quantity(bar.close, sl) / self.params.num_entries
 
         if quantity <= 0:
             return actions
@@ -240,7 +246,8 @@ class TradingEngine:
             return actions
 
         ref = self.positions[-1]
-        quantity = self._compute_quantity(bar.close, ref.sl)
+        # 与首笔同口径: 每批 = 一次预算 / 批次总数
+        quantity = self._compute_quantity(bar.close, ref.sl) / self.params.num_entries
         cost = quantity * bar.close
         if cost <= 0 or cost > self.cash:
             self._entry_window = 0
@@ -290,14 +297,17 @@ class TradingEngine:
         """仓位计算 — 公式: 仓位 = 允许亏损 / 止损偏差。
 
         这是 Layer2 的核心理念在 Layer1 的默认实现，组合层可覆盖。
+        风险基准用权益 (capital) 而非现金, 与 README 公式 E·r 一致。
         """
         if self.params.use_risk_sizing:
-            risk_amount = self.cash * self.params.risk_per_trade
+            risk_amount = self.capital * self.params.risk_per_trade
             deviation = abs(price - sl)
             if deviation <= 0:
                 return 0.0
+            # 最小偏差下限: 极窄止损时防止仓位爆炸 (与 risk/sizing.py 同口径)
+            deviation = max(deviation, price * MIN_DEVIATION_PCT)
             return (risk_amount / deviation) * self.gate_risk_scale
-        # 固定比例
+        # 固定比例 (以可用现金为基数, 受资金约束)
         return self.cash * self.params.position_size / price if price > 0 else 0.0
 
     # ------------------------------------------------------------------

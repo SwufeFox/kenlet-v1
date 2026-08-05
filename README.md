@@ -82,6 +82,11 @@
 
 **设计原则**：回测与实盘共享同一决策原语。回测循环将历史 bar 逐个喂入 `on_bar()`；实盘循环将新收盘 bar 喂入同一方法。策略、风控、仓位逻辑零分叉。
 
+**入场与出场规则**（默认策略 `strategy/ma_crossover.py`，本节为权威语义描述，代码实现与之一致）：
+
+- **入场**：收盘价上穿/下穿快均线 `ma_entry`（config 默认 38；实验基准用 20）→ 做多/做空。入场触发是**价格穿越快均线**，而非快慢均线交叉——`ma_exit` 不参与入场判定。可选过滤：趋势过滤（做多要求价格在 `ma_trend` 上方）与市场状态过滤（`regime_filter`：bull 只做多、bear 只做空、choppy 不开仓）。
+- **出场**：由引擎统一处理——价格跌破/升破慢均线 `ma_exit`（默认 60）触发 `trend_reversal`，或触及 ATR 止损/止盈（`atr_sl_mult`/`atr_tp_mult`，默认 3.0×/6.0×），或 Layer 2 淘汰/旋转/强制平仓。
+
 **市场状态 (Regime) 检测**：综合三个因子判定 `R(t) ∈ {bull, bear, ranging, choppy}`：
 
 - **方向因子**：短/中/长三条均线 (MA20/MA60/MA180) 的排列关系；
@@ -195,6 +200,9 @@ $$\kappa = \text{clamp}\left(\frac{\sigma_{target}}{\hat{\sigma}}, \kappa_{floor
 | 全禁 ($\kappa_g=0$) | 16 | +18.9 | 3.33 | 8.1 | 0.96 | 6.96 |
 | **1/3 预算 ($\kappa_g=0.33$ + RS + Vol)** | 56 | +10.4 | **2.10** | **6.4** | 0.97 | **4.83** |
 
+> 注 1：Calmar 为年化简化口径——1000 根日线 bar 近似 3 年，`Calmar ≈ 3 × 总收益 / 最大回撤`（按未舍入的原始数据计算；标准口径 总收益/最大回撤 对应 1.29 / 2.33 / 1.63，结论方向不变）。
+> 注 2：“全禁”行为仅门控配置（不启用相对强弱/波动率目标缩放）。三行结果均可用仓库代码与 `tests/market_data.pkl` 数据精确复现（交易数/收益/最大回撤/夏普/盈亏比全数一致）。
+
 **解读**：完全禁仓 ($\kappa_g=0$) 虽将最大回撤压至 8.1%，但交易机会由 56 减至 16，收益损失可观。**风险预算乘数** $\kappa_g=0.33$ 在保留全部 56 笔交易机会的同时，将风险预算收缩至 1/3，使组合最大回撤从 21.0% 收敛至 6.4%、盈亏比由 1.23 升至 2.10。收益下降 (27.1%→10.4%) 是风险预算收缩的代价，但以 Calmar 比率衡量的风险调整后收益 (3.87→4.83) 与回撤控制显著改善，符合波动率管理文献的预期。
 
 ### 4.4 LLM 决策层验证
@@ -273,9 +281,9 @@ python -m kenlet watchlist
 src/kenlet/
 ├── core/           engine.py (统一引擎) · runner.py · params.py · models.py · metrics.py
 ├── strategy/       base.py (ABC) · ma_crossover.py (默认策略)
-├── portfolio/      manager.py (组合层) · index.py (指数算法) · sizing.py
+├── portfolio/      manager.py (组合层) · index.py (指数算法)
 ├── llm/            advisor.py (LLM 决策) · prompts.py
-├── risk/           regime.py (市场状态) · stops.py (ATR止损) · sizing.py
+├── risk/           regime.py (市场状态) · stops.py (ATR止损) · sizing.py (风险仓位)
 ├── analysis/       indicators.py (MA/ATR/RSI/ADX) · macro.py (QQQ/DXY/VIX)
 ├── data/           binance.py (CCXT)
 ├── cli/            display.py (Rich 输出)

@@ -73,10 +73,13 @@ for idx, values in enumerate(combos):
     print(f"[{idx+1}/{len(combos)}] {cmd}")
 
     import subprocess
+    import os as _os
+    env = dict(_os.environ)
+    env["PYTHONPATH"] = "src" + _os.pathsep + env.get("PYTHONPATH", "")
     start = time.time()
     proc = subprocess.run(
-        ["python", "src/cli/main.py"] + cmd.split(),
-        capture_output=True, text=True, timeout=180
+        [sys.executable, "-m", "kenlet"] + cmd.split(),
+        capture_output=True, text=True, timeout=180, env=env,
     )
     elapsed = time.time() - start
 
@@ -112,7 +115,7 @@ print("\n" + "=" * 80)
 print("  🏆 最优参数 TOP 10")
 print("=" * 80)
 print(f"  {'排名':<4} {'得分':<6} {'周期':<6} {'MA入场':<8} {'MA出场':<8} {'止损':<6} {'止盈':<6} {'过滤':<6} {'收益':<8} {'夏普':<6} {'回撤':<6} {'胜率':<6}")
-print("  " + "-" * 80))
+print("  " + "-" * 80)
 for i, (s, params, det, t) in enumerate(results[:10]):
     tf = params["timeframe"]
     me = params["ma_entry"]

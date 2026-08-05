@@ -1,6 +1,6 @@
 @echo off
 title kenlet-v1 - Keep Alive
-cd /d E:\Projects\kenlet-v1
+cd /d %~dp0
 
 echo ========================================
 echo  kenlet-v1 - 保持运行

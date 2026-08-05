@@ -39,6 +39,7 @@ logs/
 reports/
 backtest_*.csv
 backtest_*.html
+llm_ledger.json
 
 # ── 外部数据缓存 (指数 CSV / 行情缓存) ──
 macro/

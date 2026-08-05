@@ -37,11 +37,14 @@ class BacktestRunner:
         portfolio_config: PortfolioConfig | None = None,
         strategy: Strategy | None = None,
         llm: LLMAdvisor | None = None,
+        ensemble_samples: int = 1,
     ) -> None:
         self.params = params or StrategyParams()
         self.portfolio_config = portfolio_config or PortfolioConfig()
         self.strategy = strategy or MACrossoverStrategy()
         self.llm = llm
+        self.ensemble_samples = max(1, ensemble_samples)
+        self._bars_per_year: float = 365.0
         self.portfolio = PortfolioManager(self.portfolio_config, self.params)
 
     def run(
@@ -93,6 +96,7 @@ class BacktestRunner:
         primary = next(iter(data.values()))
         n = len(primary)
         warmup = max(self.params.ma_exit, self.params.ma_trend, 60)
+        self._bars_per_year = _bars_per_year_of(primary)
 
         for i in range(warmup, n):
             bars: dict[str, Bar] = {}
@@ -131,10 +135,19 @@ class BacktestRunner:
                         "regime": regime,
                         "prices": {s: b.close for s, b in bars.items()},
                     }
-                    decision = self.llm.evaluate(ctx)
-                    applied = self.llm.apply(decision, self.portfolio)
-                    if applied:
-                        logger.info("[Layer3] 已执行: %s", applied)
+                    try:
+                        if self.ensemble_samples > 1:
+                            decision = self.llm.evaluate_ensemble(ctx, n_samples=self.ensemble_samples)
+                        else:
+                            decision = self.llm.evaluate(ctx)
+                        # 可靠空间: 指令校验 (过滤幻觉标的) + 决策台账落盘
+                        decision = self.llm.validate_commands(decision, self.portfolio)
+                        self.llm.record_decision(decision, ctx)
+                        applied = self.llm.apply(decision, self.portfolio)
+                        if applied:
+                            logger.info("[Layer3] 已执行: %s", applied)
+                    except Exception as e:
+                        logger.warning("[Layer3] 决策应用失败: %s", e)
 
         # 强制平仓残留
         for symbol, engine in self.portfolio.engines.items():
@@ -164,7 +177,11 @@ class BacktestRunner:
             all_trades,
             self.portfolio.combined_equity,
             self.params.initial_capital,
+            annual_factor=self._bars_per_year,
         )
+        if self.llm is not None and self.llm.enabled:
+            # 决策台账: 回填最近一次决策的事后效果
+            self.llm.feedback(metrics.total_return_pct)
         return {
             "metrics": metrics,
             "trades": [t.to_dict() for t in all_trades],
@@ -203,6 +220,28 @@ class BacktestRunner:
             else:
                 out[key] = val
         return out
+
+
+def _bars_per_year_of(df: pd.DataFrame) -> float:
+    """从数据时间轴估算每年 bar 数 (用于 Sharpe/波动率年化)。
+
+    日线 → ~365; 4h → ~2190; 1h → ~8760。无时间戳或异常时回退 365。
+    """
+    if "timestamp" not in df.columns or len(df) < 2:
+        return 365.0
+    try:
+        ts = pd.to_datetime(df["timestamp"])
+        if ts.dt.tz is not None:
+            ts = ts.dt.tz_localize(None)
+        deltas = ts.diff().dropna()
+        if deltas.empty:
+            return 365.0
+        days = float(deltas.dt.total_seconds().median()) / 86400.0
+        if days <= 0:
+            return 365.0
+        return 365.0 / days
+    except Exception:
+        return 365.0
 
 
 def create_runner_from_config(config: dict | None = None) -> BacktestRunner:

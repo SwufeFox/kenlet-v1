@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import pandas as pd
+
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -24,8 +26,12 @@ class Bar:
     def from_row(cls, row) -> "Bar":
         """从 pandas 行构造。兼容 'timestamp' 或整数索引。"""
         ts = row.get("timestamp", None)
-        if ts is None and getattr(row, "name", None) is not None:
-            ts = row.name
+        if ts is None:
+            # 无 timestamp 列时: 仅当行索引本身是时间戳才采用;
+            # 整数/字符串索引 (如 RangeIndex) 不是时间, 不能当 entry_time 用
+            name = getattr(row, "name", None)
+            if isinstance(name, (pd.Timestamp, datetime)):
+                ts = name
         return cls(
             timestamp=ts,
             open=float(row["open"]),

@@ -1,10 +1,11 @@
 """
-Layer 1 — MA 交叉策略 (默认策略)。
+Layer 1 — MA 价格穿越策略 (默认策略)。
 
 规则 (融合金融常识):
-1. 入场: 快均线 (ma_entry) 上穿/下穿 慢均线 (ma_exit) → 金叉做多 / 死叉做空
-2. 过滤: 趋势过滤 (价格需在 ma_trend 上方才做多) + 市场状态过滤 (regime_filter)
-3. 强度: 基于穿越幅度、ADX 趋势强度、RSI 位置综合打分 (0~1)
+1. 入场: 收盘价上穿/下穿快均线 (ma_entry) → 做多/做空
+2. 出场: 引擎统一处理 — 价格跌破/升破慢均线 (ma_exit) 趋势反转 / ATR 止损止盈
+3. 过滤: 趋势过滤 (价格需在 ma_trend 上方才做多) + 市场状态过滤 (regime_filter)
+4. 强度: 基于穿越幅度、ADX 趋势强度、RSI 位置综合打分 (0~1)
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from kenlet.strategy.base import Strategy
 
 
 class MACrossoverStrategy(Strategy):
-    """双均线交叉 + 趋势/状态过滤策略。"""
+    """价格穿越快均线入场 + 趋势/状态过滤策略。"""
 
     name = "ma_crossover"
 
@@ -40,7 +41,7 @@ class MACrossoverStrategy(Strategy):
         if ma_e is None or ma_x is None:
             return None
 
-        # 穿越检测 (用当前值与前一 bar 的均线比较)
+        # 穿越检测: 收盘价上穿/下穿快均线 (ma_entry); 慢均线 (ma_exit) 负责出场
         prev_ma_e = _prev(mas[params.ma_entry])
         prev_close = _prev(indicators.get("close"))
         if prev_close is None or prev_ma_e is None:
@@ -52,7 +53,7 @@ class MACrossoverStrategy(Strategy):
         if not cross_up and not cross_dn:
             return None
 
-        # 最小穿越幅度过滤
+        # 最小穿越幅度过滤 (价格与快均线距离)
         if params.min_cross_pct > 0:
             dist = abs(bar.close - ma_e) / ma_e * 100.0
             if dist < params.min_cross_pct:
@@ -75,7 +76,7 @@ class MACrossoverStrategy(Strategy):
             if not regime_allows_trade(regime, direction):
                 return None
 
-        strength = self._compute_strength(bar, indicators, direction)
+        strength = self._compute_strength(bar, indicators, direction, params)
         return Signal(
             direction=direction,
             strength=strength,
@@ -83,11 +84,11 @@ class MACrossoverStrategy(Strategy):
         )
 
     @staticmethod
-    def _compute_strength(bar: Bar, indicators: dict[str, Any], direction: str) -> float:
+    def _compute_strength(bar: Bar, indicators: dict[str, Any], direction: str, params: StrategyParams) -> float:
         """综合信号强度 0~1: 穿越幅度 + ADX + RSI 位置。"""
         score = 0.5
         mas = indicators.get("mas", {})
-        ma_e = _last(mas.get(38)) or _last(mas.get(20))
+        ma_e = _last(mas.get(params.ma_entry))
         if ma_e and ma_e > 0:
             score += min(0.25, abs(bar.close - ma_e) / ma_e * 100.0 / 4.0)
 

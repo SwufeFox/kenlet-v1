@@ -21,6 +21,7 @@ from kenlet.analysis.macro import MacroRegime, MacroState
 from kenlet.core.engine import TradingEngine
 from kenlet.core.models import Bar, EngineAction, TradeRecord
 from kenlet.core.params import StrategyParams
+from kenlet.risk.sizing import MIN_DEVIATION_PCT
 from kenlet.strategy.base import Strategy
 
 logger = logging.getLogger(__name__)
@@ -99,6 +100,7 @@ class PortfolioManager:
         # 指数因子 (QQQ/TWI/合成指数) — 趋势门控/相对强弱/波动率目标
         self.index: Any = None
         self._price_series: dict[str, Any] = {}   # 各标的收盘序列缓存
+        self._gate_neutral_logged: bool = False    # 门控数据不足警告只打一次
 
         # 宏观信号 (可选增强)
         self.macro: Any = None
@@ -197,6 +199,12 @@ class PortfolioManager:
                 idx.update_basket(self._price_series)
             if self.config.use_index_gate and idx is not None:
                 gate_open = idx.trend_gate()
+                if idx.state().trend == "neutral" and not self._gate_neutral_logged:
+                    logger.warning(
+                        "[Layer2] 指数 %s 数据不足 (%d 点 < MA%d)，门控按 risk_off 处理，禁止开新仓",
+                        idx.name, idx.state().data_points, self.config.index_ma_period,
+                    )
+                    self._gate_neutral_logged = True
                 if not gate_open:
                     logger.info("[Layer2] 指数 %s risk_off, 开仓缩放 ×%.2f",
                                 idx.name, self.config.gate_risk_scale)
@@ -221,6 +229,9 @@ class PortfolioManager:
             for a in engine_actions:
                 a.meta.setdefault("symbol", symbol)
             actions.extend(engine_actions)
+            # 新信号因满仓被拒 → 请求 Layer2 旋转 (关闭最弱持仓为新信号腾出预算)
+            if engine.entry_rejected_capacity and self.config.rotate_on_cap:
+                self.request_rotation(symbol)
             self._last_prices[symbol] = bar.close
             engine.entry_gate = True
             engine.gate_risk_scale = 1.0
@@ -272,6 +283,8 @@ class PortfolioManager:
         deviation = abs(entry_price - stop_loss)
         if deviation <= 0:
             return 0.0
+        # 最小偏差下限: 极窄止损时防止仓位爆炸 (与 risk/sizing.py 同口径)
+        deviation = max(deviation, entry_price * MIN_DEVIATION_PCT)
         quantity = allowed_loss / deviation
 
         # 现金约束

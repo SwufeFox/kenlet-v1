@@ -77,15 +77,18 @@ class StrategyParams:
             old = getattr(self, key)
             try:
                 if isinstance(old, bool):
-                    new_val = bool(value)
+                    if isinstance(value, str):
+                        new_val = value.strip().lower() in ("true", "1", "yes", "on")
+                    else:
+                        new_val = bool(value)
                 elif isinstance(old, int):
                     new_val = int(value)
                 elif isinstance(old, float):
                     new_val = float(value)
                 else:
                     new_val = value
-                # 数值合理性护栏
-                if isinstance(new_val, (int, float)):
+                # 数值合理性护栏 (bool 是 int 子类, 必须排除)
+                if isinstance(new_val, (int, float)) and not isinstance(new_val, bool):
                     if new_val <= 0 and key not in ("min_cross_pct",):
                         continue
                     if key in ("risk_per_trade", "llm_override_strength") and new_val > 1.0:

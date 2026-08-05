@@ -33,6 +33,7 @@ strategy:
   min_cross_pct: 0.0
   regime_filter: true
   trend_filter: true
+  num_entries: 1             # 分批建仓次数 (1 = 一次建仓; 风险预算按批次均分)
 
 # ===========================================================================
 # Layer 1/2 — 风控

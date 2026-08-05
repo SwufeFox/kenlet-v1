@@ -83,6 +83,7 @@ class MarketIndex:
         self.vol_lookback = vol_lookback
         self.risk_free_rate = risk_free_rate
         self._series: pd.Series | None = None   # 按时间索引的收盘价
+        self._bars_per_year: float = 365.0      # 按数据实际频率年化 (4h→~2190 等)
 
     # ------------------------------------------------------------------
     # 数据注入
@@ -103,6 +104,7 @@ class MarketIndex:
             series.index = pd.to_datetime(series.index)
         series = series[~series.index.duplicated(keep="last")].sort_index()
         self._series = series.astype(float)
+        self._update_annual_factor()
         logger.info("[Index] %s 已加载 %d 个数据点", self.name, len(series))
 
     def build_from_basket(
@@ -126,10 +128,25 @@ class MarketIndex:
         basket_ret = (rets * w).sum(axis=1).fillna(0.0)
         # 收益按日复利累乘, 基准=100
         self._series = (1.0 + basket_ret).cumprod() * 100.0
+        self._update_annual_factor()
         logger.info(
             "[Index] 已由 %d 个标的合成指数 %s (%d 点)",
             len(df.columns), self.name, len(self._series),
         )
+
+    def _update_annual_factor(self) -> None:
+        """按指数序列的实际时间间隔估算年化因子。"""
+        self._bars_per_year = 365.0
+        idx = getattr(self._series, "index", None)
+        if idx is None or len(self._series) < 2:
+            return
+        try:
+            diffs = pd.Series(idx).diff().dropna().astype("timedelta64[s]").astype(float)
+            days = float(diffs.median()) / 86400.0
+            if days > 0:
+                self._bars_per_year = 365.0 / days
+        except Exception:
+            pass
 
     def update_basket(self, price_series: dict[str, pd.Series]) -> None:
         """增量重建 — 每个 bar 调用, 让指数随行情滚动。"""
@@ -160,7 +177,7 @@ class MarketIndex:
         momentum = float(rets.iloc[-lookback:].sum()) if lookback > 0 else 0.0
         vol = 0.0
         if len(rets) >= self.vol_lookback:
-            vol = float(rets.iloc[-self.vol_lookback:].std() * np.sqrt(365.0))
+            vol = float(rets.iloc[-self.vol_lookback:].std() * np.sqrt(self._bars_per_year))
 
         return IndexState(
             name=self.name,
@@ -203,7 +220,7 @@ class MarketIndex:
         sym_ret = float(sym_a.iloc[-1] / sym_a.iloc[-1 - w] - 1.0)
         idx_ret = float(idx_a.iloc[-1] / idx_a.iloc[-1 - w] - 1.0)
         # 减去无风险 (以窗口占比折算年化无风险)
-        rf_adj = self.risk_free_rate * (w / 365.0)
+        rf_adj = self.risk_free_rate * (w / self._bars_per_year)
         return sym_ret - idx_ret - rf_adj
 
     def exposure_scale(

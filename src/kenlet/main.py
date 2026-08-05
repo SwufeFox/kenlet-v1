@@ -115,6 +115,8 @@ def cmd_backtest(args: list[str]) -> None:
     risk = None
     use_llm = "--llm" in remaining
     limit = 1000
+    ensemble = 1
+    entries = 1
 
     j = 0
     while j < len(remaining):
@@ -127,6 +129,10 @@ def cmd_backtest(args: list[str]) -> None:
             risk = float(remaining[j + 1]); j += 2
         elif a == "--limit" and j + 1 < len(remaining):
             limit = int(remaining[j + 1]); j += 2
+        elif a == "--ensemble" and j + 1 < len(remaining):
+            ensemble = max(1, int(remaining[j + 1])); j += 2
+        elif a == "--entries" and j + 1 < len(remaining):
+            entries = max(1, int(remaining[j + 1])); j += 2
         elif a == "--llm":
             j += 1
         else:
@@ -164,8 +170,15 @@ def cmd_backtest(args: list[str]) -> None:
     params.mode = "backtest"
     if risk is not None:
         params.risk_per_trade = risk
+    params.num_entries = entries
     if use_llm:
         params.llm_enabled = True
+
+    warmup = max(params.ma_exit, params.ma_trend, 60)
+    if len(df) < warmup:
+        console.print(
+            f"[yellow]警告: 数据 {len(df)} 根 < 指标预热 {warmup} 根，指标未就绪，回测可能无交易[/]"
+        )
 
     pcfg = build_portfolio_config(config)
     llm = None
@@ -179,7 +192,7 @@ def cmd_backtest(args: list[str]) -> None:
         f"MA{params.ma_entry}/{params.ma_exit}[/]"
     )
 
-    runner = BacktestRunner(params=params, portfolio_config=pcfg, llm=llm)
+    runner = BacktestRunner(params=params, portfolio_config=pcfg, llm=llm, ensemble_samples=ensemble)
     try:
         result = runner.run_single(df, symbol=symbol, start_date=start_date, end_date=end_date)
         print_backtest_results(result)
@@ -202,15 +215,23 @@ def cmd_run(args: list[str]) -> None:
     console = Console()
 
     config = load_config()
-    symbol = _normalize_symbol(args[0]) if args else "BTC/USDT"
+    rest = list(args)
+    symbol = "BTC/USDT"
+    if rest and not rest[0].startswith("-"):
+        symbol = _normalize_symbol(rest.pop(0))
+    else:
+        rest = list(args)  # 首参是 flag 时保持全量参数
     timeframe = "1h"
     use_llm = "--llm" in args
+    ensemble = 1
 
     # 解析
     j = 0
-    while j < len(args):
-        if args[j] == "--timeframe" and j + 1 < len(args):
-            timeframe = args[j + 1]; j += 2
+    while j < len(rest):
+        if rest[j] == "--timeframe" and j + 1 < len(rest):
+            timeframe = rest[j + 1]; j += 2
+        elif rest[j] == "--ensemble" and j + 1 < len(rest):
+            ensemble = max(1, int(rest[j + 1])); j += 2
         else:
             j += 1
 
@@ -285,10 +306,19 @@ def cmd_run(args: list[str]) -> None:
                 ctx = portfolio.snapshot()
                 ctx["params"] = params.to_dict()
                 ctx["market"] = {"regime": regime, "price": price}
-                decision = llm.evaluate(ctx)
-                applied = llm.apply(decision, portfolio)
-                if applied:
-                    console.print(f"  [yellow]LLM: {decision.reason} → {applied}[/]")
+                try:
+                    if ensemble > 1:
+                        decision = llm.evaluate_ensemble(ctx, n_samples=ensemble)
+                    else:
+                        decision = llm.evaluate(ctx)
+                    # 可靠空间: 指令校验 (过滤幻觉标的) + 决策台账落盘
+                    decision = llm.validate_commands(decision, portfolio)
+                    llm.record_decision(decision, ctx)
+                    applied = llm.apply(decision, portfolio)
+                    if applied:
+                        console.print(f"  [yellow]LLM: {decision.reason} → {applied}[/]")
+                except Exception as e:
+                    console.print(f"  [yellow]LLM 应用失败: {e}[/]")
 
         except KeyboardInterrupt:
             console.print("\n停止交易循环")

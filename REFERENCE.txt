@@ -2,6 +2,9 @@
   KENZON TRADER — 命令参考手册
 ======================================
 
+⚠️ 本文档是旧版 (kenzon) CLI 手册，多数选项在当前 `python -m kenlet` CLI 中已不存在
+   （--ma-entry/--stop-pct/--tp-pct/--simple/--filter/--entries 等，参数改由 config.yaml 控制）。
+   实际命令以 `python -m kenlet help` 为准。
 用法: run_cli <命令> [参数]
 
 --------

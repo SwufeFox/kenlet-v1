@@ -16,8 +16,7 @@ BINANCE_API_KEY=你拿到的testnet_key
 BINANCE_SECRET=你拿到的testnet_secret
 BINANCE_TESTNET=true
 BINANCE_FUTURES=true
-BINANCE_LEVERAGE=5
-KENZON_LOG_LEVEL=INFO
+KENLET_LOG_LEVEL=INFO
 ```
 
 各参数：
@@ -45,22 +44,22 @@ powercfg /change lid-action-ac 0
 
 ```bash
 # 查看 BTC 技术状态
-python src/cli/main.py status BTC
+python -m kenlet status BTC
 
 # 全量分析报告
-python run_full_report.py
+python -m kenlet dashboard
 
 # 回测（本地数据，无需联网）
-python src/cli/main.py backtest BTC 2025-01-01 2026-07-12
+python -m kenlet backtest BTC 2025-01-01 2026-07-12
 ```
 
-## 5️⃣ 激进模式（4h周期 + 杠杆）
+## 5️⃣ 激进模式（4h周期）
 
 ```bash
-python run_aggressive.py
+python -m kenlet backtest BTC 2025-01-01 2026-07-12 --timeframe 4h
 ```
 
-会跑 4小时级别的 MA14/30 金叉死叉策略，带 5x 杠杆回测。
+均线周期/止损等参数在 `config.yaml` 的 `strategy:` / `risk:` 段调整（旧版 `--ma-entry` 等 CLI 选项已移除；本系统不下真实订单，杠杆配置不生效）。
 
 ## 6️⃣ 白嫖服务器
 
@@ -69,7 +68,7 @@ python run_aggressive.py
 2. 开一台 Ubuntu 22.04 ARM (4核24G)
 3. SSH 上去装 Python + Git
 4. 把项目 git pull 上去
-5. 后台跑 `nohup python keep_alive.py &`
+5. 后台跑 `nohup python -m kenlet status BTC &`（或 `while true; do python -m kenlet status BTC; sleep 300; done`）
 
 **或 — 旧安卓手机装 Termux**
 ```bash

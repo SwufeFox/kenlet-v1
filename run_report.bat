@@ -1,3 +1,3 @@
 @echo off
-cd /d E:\Projects\kenlet-v1
+cd /d %~dp0
 python -m kenlet dashboard
